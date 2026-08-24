@@ -1,6 +1,8 @@
 import type { HousingNotice } from "../housing-notice-data";
 import { HorizontalScrollControls } from "./HorizontalScrollControls";
 import { NOTICE_CARD_HISTORY_PREVIEWS } from "./NoticeCardHistory";
+import { ShowcaseSourceActions } from "./RegisteredShowcaseDesigns";
+import { getShowcaseDesignSourceUrl } from "./showcase-design-paths";
 import {
   getPastPrototypeVersions,
   SHOWCASE_VIEW_IDS,
@@ -58,6 +60,13 @@ export function ShowcaseHistory({ view, viewTitle, notice }: ShowcaseHistoryProp
               <p className="prototype-history__summary">{revision.summary}</p>
               <div className="prototype-history__preview">
                 <HistoryPreview revision={revision} view={view} notice={notice} />
+              </div>
+              <div className="prototype-history__source">
+                <ShowcaseSourceActions
+                  title={`${viewTitle} ${revision.label}`}
+                  fileName={revision.id}
+                  sourceUrl={getShowcaseDesignSourceUrl("builtin", revision.id)}
+                />
               </div>
             </article>
           </li>

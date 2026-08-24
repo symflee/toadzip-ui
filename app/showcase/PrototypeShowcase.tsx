@@ -36,6 +36,13 @@ import {
 import { ShowcaseHistory } from "./ShowcaseHistory";
 import { HorizontalScrollControls } from "./HorizontalScrollControls";
 import {
+  RegisteredShowcaseDesigns,
+  ShowcaseSourceActions,
+  type CreateDesignAction,
+} from "./RegisteredShowcaseDesigns";
+import { getShowcaseDesignSourceUrl } from "./showcase-design-paths";
+import type { ShowcaseDesignPage } from "./showcase-design-types";
+import {
   getCurrentPrototypeSlots,
   type ShowcaseVariant,
   type ShowcaseView,
@@ -120,9 +127,15 @@ const SHOWCASE_LISTING = HOUSING_LISTINGS.find((listing) => {
 
 interface PrototypeShowcaseProps {
   view: ShowcaseView;
+  registeredDesignPage?: ShowcaseDesignPage;
+  createRegisteredDesign?: CreateDesignAction;
 }
 
-export function PrototypeShowcase({ view }: PrototypeShowcaseProps) {
+export function PrototypeShowcase({
+  view,
+  registeredDesignPage,
+  createRegisteredDesign,
+}: PrototypeShowcaseProps) {
   const activeView = SHOWCASE_VIEWS.find((item) => item.id === view) ?? SHOWCASE_VIEWS[0];
   const currentSlots = getCurrentPrototypeSlots(view);
   const [selectedNoticeId, setSelectedNoticeId] = useState(SHOWCASE_NOTICE?.id ?? "");
@@ -256,49 +269,76 @@ export function PrototypeShowcase({ view }: PrototypeShowcaseProps) {
           )}
         </div>
 
-        <div className="prototype-comparison-shell">
-          <HorizontalScrollControls label={comparisonLabel} targetId={comparisonId} />
-          <section
-            id={comparisonId}
-            className={`prototype-comparison ${view === "notice-card" ? "prototype-comparison--notice-current" : ""}`}
-            aria-label={comparisonRegionLabel}
-            tabIndex={0}
-          >
-            {currentSlots.map(({ variant, revision }) => (
-              <article
-                className="prototype-variant-column"
-                key={variant}
-                aria-label={`시안 ${variant}`}
-                data-has-design={revision !== null}
-                tabIndex={0}
-              >
-                <header className="prototype-variant-column__header">
-                  <span>시안 {variant}</span>
-                  <b>{revision?.statusLabel ?? "빈 자리"}</b>
-                </header>
-                <div className={`prototype-variant-stage prototype-variant-stage--${view}`}>
+        <section
+          className="prototype-existing-designs"
+          aria-labelledby={`existing-designs-${view}`}
+        >
+          <header className="prototype-existing-designs__header">
+            <span>PRODUCT DESIGN ARCHIVE</span>
+            <h2 id={`existing-designs-${view}`}>기존 시안</h2>
+            <p>현재 React UI와 변경 이력을 보존하고, 대표 상태의 정적 HTML/CSS 전달본을 함께 제공합니다.</p>
+          </header>
+
+          <div className="prototype-comparison-shell">
+            <HorizontalScrollControls label={comparisonLabel} targetId={comparisonId} />
+            <section
+              id={comparisonId}
+              className={`prototype-comparison ${view === "notice-card" ? "prototype-comparison--notice-current" : ""}`}
+              aria-label={comparisonRegionLabel}
+              tabIndex={0}
+            >
+              {currentSlots.map(({ variant, revision }) => (
+                <article
+                  className="prototype-variant-column"
+                  key={variant}
+                  aria-label={`시안 ${variant}`}
+                  data-has-design={revision !== null}
+                  tabIndex={0}
+                >
+                  <header className="prototype-variant-column__header">
+                    <span>시안 {variant}</span>
+                    <b>{revision?.statusLabel ?? "빈 자리"}</b>
+                  </header>
+                  <div className={`prototype-variant-stage prototype-variant-stage--${view}`}>
+                    {revision && (
+                      <CurrentPrototype
+                        view={view}
+                        variant={variant}
+                        notice={SHOWCASE_NOTICE}
+                        listing={SHOWCASE_LISTING}
+                        selectedNoticeId={selectedNoticeId}
+                        savedNoticeIds={savedNoticeIds}
+                        onSelectNotice={setSelectedNoticeId}
+                        onSaveNotice={toggleSavedNotice}
+                      />
+                    )}
+                    {!revision && <EmptyPrototypeSlot variant={variant} />}
+                  </div>
                   {revision && (
-                    <CurrentPrototype
-                      view={view}
-                      variant={variant}
-                      notice={SHOWCASE_NOTICE}
-                      listing={SHOWCASE_LISTING}
-                      selectedNoticeId={selectedNoticeId}
-                      savedNoticeIds={savedNoticeIds}
-                      onSelectNotice={setSelectedNoticeId}
-                      onSaveNotice={toggleSavedNotice}
-                    />
+                    <div className="prototype-variant-source">
+                      <ShowcaseSourceActions
+                        title={`${activeView.title} 시안 ${variant}`}
+                        fileName={revision.id}
+                        sourceUrl={getShowcaseDesignSourceUrl("builtin", revision.id)}
+                      />
+                    </div>
                   )}
-                  {!revision && <EmptyPrototypeSlot variant={variant} />}
-                </div>
-              </article>
-            ))}
-          </section>
-        </div>
-        <ShowcaseHistory
-          view={view}
+                </article>
+              ))}
+            </section>
+          </div>
+          <ShowcaseHistory
+            view={view}
+            viewTitle={activeView.title}
+            notice={SHOWCASE_NOTICE}
+          />
+        </section>
+
+        <RegisteredShowcaseDesigns
+          viewId={view}
           viewTitle={activeView.title}
-          notice={SHOWCASE_NOTICE}
+          initialPage={registeredDesignPage}
+          createDesign={createRegisteredDesign}
         />
       </section>
     </main>

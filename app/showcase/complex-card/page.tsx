@@ -1,4 +1,4 @@
-import { PrototypeShowcase } from "../PrototypeShowcase";
+import { ShowcasePage } from "../ShowcasePage";
 import { createShowcaseMetadata } from "../showcase-metadata";
 
 export const metadata = createShowcaseMetadata(
@@ -7,5 +7,5 @@ export const metadata = createShowcaseMetadata(
 );
 
 export default function ComplexCardShowcasePage() {
-  return <PrototypeShowcase view="complex-card" />;
+  return <ShowcasePage view="complex-card" />;
 }

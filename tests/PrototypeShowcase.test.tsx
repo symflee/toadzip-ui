@@ -10,6 +10,34 @@ const SHOWCASE_NOTICE = HOUSING_NOTICES.find((notice) => {
 }) ?? HOUSING_NOTICES[0]!;
 
 describe("UI 시안 보드", () => {
+  it("기존 시안과 등록 시안을 분리하고 DB 오류가 기존 시안을 가리지 않는다", () => {
+    render(
+      <PrototypeShowcase
+        view="notice-card"
+        registeredDesignPage={{
+          status: "unavailable",
+          items: [],
+          nextCursor: null,
+          message: "등록 저장소에 연결할 수 없습니다.",
+        }}
+      />,
+    );
+
+    const existing = screen.getByRole("region", { name: "기존 시안" });
+    const registered = screen.getByRole("region", { name: "등록 시안" });
+    expect(within(existing).getByRole("region", {
+      name: "현재 공고 목록 카드 시안 A, B 비교",
+    })).toBeInTheDocument();
+    expect(within(existing).getAllByRole("button", {
+      name: "HTML/CSS 코드 보기",
+    })).toHaveLength(7);
+    expect(within(registered).getByRole("alert")).toHaveTextContent(
+      "등록 저장소에 연결할 수 없습니다.",
+    );
+    expect(existing.compareDocumentPosition(registered) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+  });
+
   it("보드와 A/B/C 비교 영역을 키보드로 스크롤할 수 있다", () => {
     render(<PrototypeShowcase view="notice-detail" />);
 
@@ -219,7 +247,9 @@ describe("UI 시안 보드", () => {
     });
     expect(within(timeline).getAllByText("Codex 작업 diff에서 복원")).toHaveLength(4);
     expect(within(timeline).getByText("현재 C 보관")).toBeInTheDocument();
-    expect(within(timeline).queryByRole("button")).not.toBeInTheDocument();
+    expect(
+      within(timeline).getAllByRole("button", { name: "HTML/CSS 코드 보기" }),
+    ).toHaveLength(5);
     expect(within(timeline).queryByRole("link")).not.toBeInTheDocument();
 
     const archiveIds = changes.map((change, index) => {
