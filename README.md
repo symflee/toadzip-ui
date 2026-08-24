@@ -58,8 +58,10 @@ Node.js 22.x를 사용합니다.
 
 ## Neon 설정
 
-`DATABASE_URL`은 서버 전용 환경 변수입니다. Development, Preview, Production은 서로 다른
-Neon 브랜치와 런타임 로그인 역할을 사용합니다. 스키마 소유자 URL로 migration을 적용합니다.
+`DATABASE_URL`은 서버 전용 환경 변수입니다. 현재 Vercel 배포는 사이트 전체가 테스트용이므로
+Development, Preview, Production이 같은 Neon `main` 브랜치와 제한된 런타임 로그인 역할을
+공유합니다. 테스트용 범위를 벗어나 운영 데이터가 생기면 환경별 브랜치와 역할로 분리합니다.
+스키마 소유자 URL은 migration과 권한 설정에만 사용합니다.
 
 ```bash
 DATABASE_URL='postgresql://schema-owner...' npm run db:migrate

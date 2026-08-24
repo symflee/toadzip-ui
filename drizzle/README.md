@@ -1,8 +1,10 @@
 # Neon and Drizzle setup
 
-Use a separate Neon branch and connection string for Development, Preview, and
-Production. `DATABASE_URL` is server-only and must not use a `NEXT_PUBLIC_`
-prefix.
+`DATABASE_URL` is server-only and must not use a `NEXT_PUBLIC_` prefix. This
+repository is currently deployed as a test-only site, so Vercel Development,
+Preview, and Production intentionally share the Neon `main` branch and the same
+restricted runtime login. Split the branches and runtime logins before using
+the project for non-test or production data.
 
 Apply the checked-in migration from an owner connection:
 
