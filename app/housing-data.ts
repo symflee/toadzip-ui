@@ -1,4 +1,5 @@
-export type ListingStatus = "open" | "upcoming" | "always";
+export type ListingStatus = "open" | "upcoming" | "always" | "closed";
+export type HousingDataSource = "prototype" | "notice-document";
 
 export type HouseholdType = "youth" | "newlywed" | "family" | "senior";
 export type IncomeBand = "under70" | "under100" | "under120";
@@ -58,7 +59,7 @@ export interface HousingComplexDetails {
   photoUrl: string;
   address: string;
   buildingType: "아파트";
-  hasElevator: boolean;
+  hasElevator: boolean | null;
   heatingType: string;
   supplyAreaSquareMeters: number;
   corridorType: string;
@@ -93,7 +94,9 @@ export type EligibilityTag =
 export interface HousingListing {
   id: string;
   isDemo: true;
-  dataLabel: "프로토타입 예시 데이터";
+  dataLabel: "프로토타입 예시 데이터" | "공고문 기반 예시 데이터";
+  sourceKind: HousingDataSource;
+  sourceDocumentName: string | null;
   title: string;
   district: string;
   neighborhood: string;
@@ -111,6 +114,7 @@ export interface HousingListing {
   applyStart: string;
   applyEnd: string;
   units: number;
+  unitLabel: "공급 세대" | "모집 예비자";
   transitLabel: string;
   eligibilityTags: readonly EligibilityTag[];
   status: ListingStatus;
@@ -189,9 +193,19 @@ const DEMO_COMPLEX_OVERVIEW_URL =
 
 type DemoListingInput = Omit<
   HousingListing,
-  "isDemo" | "dataLabel" | "regionLabel" | "completedAt" | "complexDetails"
+  | "isDemo"
+  | "dataLabel"
+  | "sourceKind"
+  | "sourceDocumentName"
+  | "unitLabel"
+  | "regionLabel"
+  | "completedAt"
+  | "complexDetails"
 > & Partial<
-  Pick<HousingListing, "regionLabel" | "completedAt" | "complexDetails">
+  Pick<
+    HousingListing,
+    "regionLabel" | "completedAt" | "complexDetails" | "unitLabel"
+  >
 >;
 
 function demoListing(listing: DemoListingInput): HousingListing {
@@ -204,6 +218,9 @@ function demoListing(listing: DemoListingInput): HousingListing {
     complexDetails: listing.complexDetails ?? createDemoComplexDetails(listing, regionLabel),
     isDemo: true,
     dataLabel: DEMO_LABEL,
+    sourceKind: "prototype",
+    sourceDocumentName: null,
+    unitLabel: listing.unitLabel ?? "공급 세대",
   };
 }
 
@@ -304,6 +321,79 @@ function createDemoFacilities(neighborhood: string): NearbyFacility[] {
     { kind: "bus-stop", name: `${neighborhood} 주거단지 정류장`, travelMode: "도보", minutes: 4 },
     { kind: "subway", name: `${neighborhood} 인근역`, travelMode: "도보", minutes: 12 },
     { kind: "large-mart", name: "대형마트 성남점", travelMode: "대중교통", minutes: 18 },
+  ];
+}
+
+type NoticeDocumentListingInput = Omit<
+  HousingListing,
+  "isDemo" | "dataLabel" | "sourceKind"
+>;
+
+type NoticeDocumentComplexInput = Pick<
+  HousingComplexDetails,
+  | "address"
+  | "heatingType"
+  | "supplyAreaSquareMeters"
+  | "corridorType"
+  | "totalHouseholds"
+  | "housingTypes"
+>;
+
+function noticeDocumentListing(
+  listing: NoticeDocumentListingInput,
+): HousingListing {
+  return {
+    ...listing,
+    isDemo: true,
+    dataLabel: "공고문 기반 예시 데이터",
+    sourceKind: "notice-document",
+  };
+}
+
+function noticeDocumentComplex(
+  input: NoticeDocumentComplexInput,
+): HousingComplexDetails {
+  return {
+    ...input,
+    photoUrl: DEMO_COMPLEX_PHOTO_URL,
+    buildingType: "아파트",
+    hasElevator: null,
+    annualMoveOutHouseholds: null,
+    nearbyFacilities: createNoticeDocumentPlaceholderFacilities(),
+    transitRoute: {
+      destination: "목적지 미설정(프로토타입)",
+      steps: ["공고문에 교통 경로 정보 없음", "지도 API 연동 후 제공 예정"],
+      drivingMinutes: 0,
+      transitMinutes: 0,
+    },
+    assignedSchool: {
+      name: "배정학교 미확인(프로토타입)",
+      students: 0,
+      monthlyEducationCostWon: 0,
+      afterSchoolPrograms: 0,
+      teachers: 0,
+    },
+    overviewImageUrl: DEMO_COMPLEX_OVERVIEW_URL,
+    totalParkingSpaces: 0,
+    recentCompetitionRate: null,
+    pastNotices: [],
+  };
+}
+
+function createNoticeDocumentPlaceholderFacilities(): NearbyFacility[] {
+  return [
+    {
+      kind: "convenience-store",
+      name: "주변 편의점(프로토타입)",
+      travelMode: "도보",
+      minutes: 0,
+    },
+    {
+      kind: "bus-stop",
+      name: "인근 버스정류장(프로토타입)",
+      travelMode: "도보",
+      minutes: 0,
+    },
   ];
 }
 
@@ -794,6 +884,283 @@ export const HOUSING_LISTINGS: readonly HousingListing[] = [
     status: "always",
     daysLeft: null,
   }),
+  noticeDocumentListing({
+    id: "pdf-jeonju-samcheon6",
+    sourceDocumentName: "삼천6단지공임50년예비입주자표준모집공고문.pdf",
+    title: "전주삼천6단지",
+    district: "전주시 완산구",
+    neighborhood: "삼천동1가",
+    latitude: 35.7974,
+    longitude: 127.121,
+    provider: "LH",
+    rentalType: "50년공공임대주택",
+    regionLabel: "전북",
+    completedAt: "2000.04",
+    audience: ["무주택세대구성원", "예비입주자"],
+    areaSquareMeters: 39.51,
+    depositWon: 15_071_000,
+    monthlyRentWon: 209_670,
+    applyStart: "2026-08-14",
+    applyEnd: "2026-08-14",
+    units: 65,
+    unitLabel: "모집 예비자",
+    transitLabel: "교통 정보 미확인(공고문 기준)",
+    eligibilityTags: [
+      "homeless",
+      "household-family",
+      "size-one",
+      "income-under-70",
+      "asset-standard",
+    ],
+    status: "closed",
+    daysLeft: null,
+    complexDetails: noticeDocumentComplex({
+      address: "전북 전주시 완산구 삼천천변1길 9",
+      heatingType: "개별난방",
+      supplyAreaSquareMeters: 67.94,
+      corridorType: "복도식",
+      totalHouseholds: 854,
+      housingTypes: [
+        {
+          code: "39.51(17-A)",
+          roomLabel: "39㎡형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 67.94,
+          exclusiveAreaSquareMeters: 39.51,
+          depositWon: 15_071_000,
+          monthlyRentWon: 209_670,
+          convertedDepositWon: 40_071_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "39.63(17-B)",
+          roomLabel: "39㎡형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 68.15,
+          exclusiveAreaSquareMeters: 39.63,
+          depositWon: 15_115_000,
+          monthlyRentWon: 210_080,
+          convertedDepositWon: 40_115_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "39.77(17-C)",
+          roomLabel: "39㎡형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 68.39,
+          exclusiveAreaSquareMeters: 39.77,
+          depositWon: 15_169_000,
+          monthlyRentWon: 210_560,
+          convertedDepositWon: 40_169_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+      ],
+    }),
+  }),
+  noticeDocumentListing({
+    id: "pdf-gimhae-jinyeong-centumcube",
+    sourceDocumentName: "20260806_김해진영2B5블록(센텀큐브)예비입주자모집.pdf",
+    title: "김해진영 센텀큐브",
+    district: "김해시 진영읍",
+    neighborhood: "진영읍",
+    latitude: 35.3047,
+    longitude: 128.733,
+    provider: "LH",
+    rentalType: "10년 분양전환 공공임대주택(리츠)",
+    regionLabel: "경남",
+    completedAt: "2017.12",
+    audience: ["무주택세대구성원", "예비입주자"],
+    areaSquareMeters: 74.82,
+    depositWon: 51_521_000,
+    monthlyRentWon: 515_210,
+    applyStart: "2026-08-18",
+    applyEnd: "2026-08-19",
+    units: 65,
+    unitLabel: "모집 예비자",
+    transitLabel: "교통 정보 미확인(공고문 기준)",
+    eligibilityTags: [
+      "homeless",
+      "household-family",
+      "size-one",
+      "income-under-120",
+      "asset-high",
+    ],
+    status: "closed",
+    daysLeft: null,
+    complexDetails: noticeDocumentComplex({
+      address: "경상남도 김해시 진영읍 김해대로 461",
+      heatingType: "개별난방",
+      supplyAreaSquareMeters: 100.6844,
+      corridorType: "계단식(프로토타입 보완값)",
+      totalHouseholds: 595,
+      housingTypes: [
+        {
+          code: "74A",
+          roomLabel: "74㎡형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 100.6844,
+          exclusiveAreaSquareMeters: 74.82,
+          depositWon: 51_521_000,
+          monthlyRentWon: 515_210,
+          convertedDepositWon: 51_521_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "84A",
+          roomLabel: "84A1형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 113.9663,
+          exclusiveAreaSquareMeters: 84.69,
+          depositWon: 63_580_000,
+          monthlyRentWon: 570_020,
+          convertedDepositWon: 63_580_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "84B",
+          roomLabel: "84A2형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 114.3028,
+          exclusiveAreaSquareMeters: 84.94,
+          depositWon: 63_580_000,
+          monthlyRentWon: 570_020,
+          convertedDepositWon: 63_580_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "84C",
+          roomLabel: "84A3형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 114.3028,
+          exclusiveAreaSquareMeters: 84.94,
+          depositWon: 63_580_000,
+          monthlyRentWon: 570_020,
+          convertedDepositWon: 63_580_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "84D",
+          roomLabel: "84B1형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 114.1951,
+          exclusiveAreaSquareMeters: 84.86,
+          depositWon: 63_580_000,
+          monthlyRentWon: 570_020,
+          convertedDepositWon: 63_580_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "84E",
+          roomLabel: "84B2형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 114.2355,
+          exclusiveAreaSquareMeters: 84.89,
+          depositWon: 63_580_000,
+          monthlyRentWon: 570_020,
+          convertedDepositWon: 63_580_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+      ],
+    }),
+  }),
+  noticeDocumentListing({
+    id: "pdf-busan-myeongji-happy",
+    sourceDocumentName:
+      "(210310)부산명지행복주택추가입주자모집공고문(산단형)_공고용수정.pdf",
+    title: "부산명지 행복주택",
+    district: "부산광역시 강서구",
+    neighborhood: "명지동",
+    latitude: 35.095,
+    longitude: 128.902,
+    provider: "LH",
+    rentalType: "행복주택(산업단지형)",
+    regionLabel: "부산",
+    completedAt: "2022.01",
+    audience: ["산업단지근로자", "청년", "신혼부부"],
+    areaSquareMeters: 16.7,
+    depositWon: 12_923_000,
+    monthlyRentWon: 66_760,
+    applyStart: "2021-03-22",
+    applyEnd: "2021-03-25",
+    units: 215,
+    unitLabel: "공급 세대",
+    transitLabel: "교통 정보 미확인(공고문 기준)",
+    eligibilityTags: [
+      "homeless",
+      "household-youth",
+      "size-one",
+      "income-under-100",
+      "asset-standard",
+    ],
+    status: "closed",
+    daysLeft: null,
+    complexDetails: noticeDocumentComplex({
+      address: "부산광역시 강서구 명지동 3227-2 일원",
+      heatingType: "미확인(프로토타입 보완값)",
+      supplyAreaSquareMeters: 35.6157,
+      corridorType: "미확인(프로토타입 보완값)",
+      totalHouseholds: 284,
+      housingTypes: [
+        {
+          code: "16형(빌트인)",
+          roomLabel: "원룸",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 35.6157,
+          exclusiveAreaSquareMeters: 16.7,
+          depositWon: 12_923_000,
+          monthlyRentWon: 66_760,
+          convertedDepositWon: 12_923_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "26A형",
+          roomLabel: "26㎡형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 57.0491,
+          exclusiveAreaSquareMeters: 26.75,
+          depositWon: 20_509_000,
+          monthlyRentWon: 105_960,
+          convertedDepositWon: 20_509_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "26B형(주거약자)",
+          roomLabel: "26㎡형(주거약자)",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 57.0491,
+          exclusiveAreaSquareMeters: 26.75,
+          depositWon: 22_922_000,
+          monthlyRentWon: 118_430,
+          convertedDepositWon: 22_922_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+        {
+          code: "36형",
+          roomLabel: "36㎡형",
+          floorPlanUrl: null,
+          supplyAreaSquareMeters: 78.1629,
+          exclusiveAreaSquareMeters: 36.65,
+          depositWon: 33_732_000,
+          monthlyRentWon: 174_280,
+          convertedDepositWon: 33_732_000,
+          monthlyMaintenanceWon: 0,
+          isDuplex: false,
+        },
+      ],
+    }),
+  }),
 ];
 
 export function filterListings(
@@ -1048,6 +1415,7 @@ function compareStatus(left: HousingListing, right: HousingListing): number {
     open: 0,
     upcoming: 1,
     always: 2,
+    closed: 3,
   };
   return statusRanks[left.status] - statusRanks[right.status];
 }

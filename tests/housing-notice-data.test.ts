@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   formatNoticeDate,
   HOUSING_NOTICES,
+  findNoticeByComplexId,
   noticeDeadlineContext,
   noticeDeadlineLabel,
   noticeStatusLabel,
@@ -11,6 +12,41 @@ import { HOUSING_LISTINGS } from "../app/housing-data";
 const listingById = new Map(HOUSING_LISTINGS.map((listing) => [listing.id, listing]));
 
 describe("housing notice data", () => {
+  it("세 PDF 공고를 기존 mock 공고와 함께 제공하고 원본 단지에 연결한다", () => {
+    const pdfNotices = HOUSING_NOTICES.filter((notice) => {
+      return notice.sourceKind === "notice-document";
+    });
+
+    expect(pdfNotices.map((notice) => notice.id)).toEqual([
+      "notice-jeonju-samcheon6-50year-20260804",
+      "notice-gimhae-jinyeong-centumcube-20260806",
+      "notice-busan-myeongji-happy-20210310",
+    ]);
+    expect(pdfNotices.every((notice) => notice.status === "closed")).toBe(true);
+
+    for (const notice of pdfNotices) {
+      for (const complex of notice.details.supplyComplexes) {
+        expect(findNoticeByComplexId(complex.id)?.id).toBe(notice.id);
+        expect(listingById.get(complex.id)).toBeDefined();
+      }
+    }
+  });
+
+  it("예비자 모집과 실제 공급을 서로 다른 라벨로 유지한다", () => {
+    const samcheon = HOUSING_NOTICES.find((notice) => {
+      return notice.id === "notice-jeonju-samcheon6-50year-20260804";
+    });
+    const busan = HOUSING_NOTICES.find((notice) => {
+      return notice.id === "notice-busan-myeongji-happy-20210310";
+    });
+
+    expect(samcheon?.unitLabel).toBe("모집 예비자");
+    expect(samcheon?.units).toBe(65);
+    expect(samcheon?.details.supplyComplexes[0]?.unitLabel).toBe("모집 예비자");
+    expect(busan?.unitLabel).toBe("공급 세대");
+    expect(busan?.units).toBe(215);
+  });
+
   it("공고 목록 카드에 필요한 속성을 독립된 공고 모델로 제공한다", () => {
     expect(HOUSING_NOTICES.length).toBeGreaterThan(0);
     expect(new Set(HOUSING_NOTICES.map((notice) => notice.id)).size).toBe(
@@ -26,7 +62,7 @@ describe("housing notice data", () => {
       expect(notice.viewCount).toBeGreaterThanOrEqual(0);
       expect(notice.units).toBeGreaterThan(0);
       expect(notice.provider).not.toBe("");
-      expect(["new", "reserve"]).toContain(notice.recruitmentKind);
+      expect(["new", "reserve", "additional"]).toContain(notice.recruitmentKind);
       expect(["original", "corrected"]).toContain(notice.revision);
     }
   });
@@ -124,17 +160,14 @@ describe("housing notice data", () => {
   it("게시일부터 입주 예정월까지 상세 공급 일정이 시간순으로 이어진다", () => {
     for (const notice of HOUSING_NOTICES) {
       const schedule = notice.details.schedule;
-      expect(schedule.map((step) => step.id)).toEqual([
-        "published",
-        "application",
-        "result",
-        "contract",
-        "move-in",
-      ]);
       expect(schedule[0]?.startAt).toBe(notice.publishedAt);
-      expect(schedule[1]?.startAt).toBe(notice.applyStart);
-      expect(schedule[1]?.endAt).toBe(notice.applyEnd);
-      expect(schedule.at(-1)?.startAt.startsWith(notice.details.moveInMonth)).toBe(true);
+      const application = schedule.find((step) => step.id === "application");
+      expect(application?.startAt).toBe(notice.applyStart);
+      expect(application?.endAt).toBe(notice.applyEnd);
+      if (notice.details.moveInMonth) {
+        const moveIn = schedule.find((step) => step.id === "move-in");
+        expect(moveIn?.startAt.startsWith(notice.details.moveInMonth)).toBe(true);
+      }
 
       const startTimes = schedule.map((step) => Date.parse(step.startAt));
       expect(startTimes.every(Number.isFinite)).toBe(true);
@@ -151,8 +184,13 @@ describe("housing notice data", () => {
       expect(notice.details).toHaveProperty("sourceUrl");
       expect(notice.details.audiences).toContain("무주택자");
       expect(notice.details.eligibilityTags.length).toBeGreaterThan(0);
-      expect(notice.details.predictedCompetitionRate).not.toBeNull();
-      expect(notice.details.predictedCompetitionRate ?? 0).toBeGreaterThan(0);
+      if (notice.sourceKind === "prototype") {
+        expect(notice.details.predictedCompetitionRate).not.toBeNull();
+        expect(notice.details.predictedCompetitionRate ?? 0).toBeGreaterThan(0);
+      }
+      if (notice.sourceKind === "notice-document") {
+        expect(notice.details.predictedCompetitionRate).toBeNull();
+      }
     }
   });
 });

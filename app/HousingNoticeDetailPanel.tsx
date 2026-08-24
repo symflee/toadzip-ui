@@ -25,9 +25,11 @@ import { type EligibilityProfile, type EligibilityTag } from "./housing-data";
 interface HousingNoticeDetailPanelProps {
   notice: HousingNotice;
   profile: EligibilityProfile;
+  embedded?: boolean;
   onClose: () => void;
   onOpenPdf: () => void;
   onOpenSource: () => void;
+  onOpenComplex: (complexId: string) => void;
 }
 
 type SupplyFilter = "all" | NoticeSupplyKind;
@@ -49,9 +51,11 @@ interface HousingTypeEntry {
 export function HousingNoticeDetailPanel({
   notice,
   profile,
+  embedded = false,
   onClose,
   onOpenPdf,
   onOpenSource,
+  onOpenComplex,
 }: HousingNoticeDetailPanelProps) {
   const supplyComplexes = notice.details.supplyComplexes;
   const [selectedComplexId, setSelectedComplexId] = useState(
@@ -101,7 +105,7 @@ export function HousingNoticeDetailPanel({
 
   return (
     <aside
-      className="complex-detail-panel notice-detail-panel"
+      className={`complex-detail-panel notice-detail-panel ${embedded ? "is-showcase" : ""}`}
       aria-label={`${notice.title} 공고 상세 정보`}
     >
       <header className="complex-detail-panel__header">
@@ -109,12 +113,19 @@ export function HousingNoticeDetailPanel({
           <span>공고 상세 정보</span>
           <strong>{notice.title}</strong>
         </div>
-        <button type="button" aria-label="공고 상세 닫기" onClick={onClose}>
-          <X size={19} />
-        </button>
+        {!embedded && (
+          <button type="button" aria-label="공고 상세 닫기" onClick={onClose}>
+            <X size={19} />
+          </button>
+        )}
       </header>
 
-      <div className="complex-detail-panel__scroll notice-detail-panel__scroll">
+      <div
+        className="complex-detail-panel__scroll notice-detail-panel__scroll"
+        role="region"
+        aria-label={`${notice.title} 공고 상세 내용`}
+        tabIndex={0}
+      >
         <section className="notice-detail-identity">
           <div className="notice-detail-identity__badges">
             <span className="notice-detail-badge notice-detail-badge--type">
@@ -191,7 +202,7 @@ export function HousingNoticeDetailPanel({
 
         <NoticeDetailSection
           title="상세 공급 일정"
-          description={`입주 예정월 ${formatMonth(notice.details.moveInMonth)}`}
+          description={notice.details.moveInNote}
         >
           <ol className="notice-schedule">
             {notice.details.schedule.map((step) => (
@@ -207,15 +218,15 @@ export function HousingNoticeDetailPanel({
               value={`${notice.details.supplyComplexes.length}곳`}
             />
             <NoticeDetailFact
-              term="공급 세대수"
-              value={`${supplyHouseholds.toLocaleString("ko-KR")}호`}
+              term={notice.unitLabel}
+              value={formatUnits(supplyHouseholds, notice.unitLabel)}
             />
           </dl>
         </NoticeDetailSection>
 
         <NoticeDetailSection
           title="공급 단지별 공고 요약"
-          description={`총 ${supplyComplexes.length}개 단지 · ${supplyHouseholds.toLocaleString("ko-KR")}호 공급`}
+          description={`총 ${supplyComplexes.length}개 단지 · ${formatUnits(supplyHouseholds, notice.unitLabel)}`}
         >
           <div className="notice-complex-list">
             {supplyComplexes.map((complex) => {
@@ -246,8 +257,8 @@ export function HousingNoticeDetailPanel({
                         value={`${complex.totalHouseholds.toLocaleString("ko-KR")}세대`}
                       />
                       <NoticeDetailFact
-                        term="공급 세대 수"
-                        value={`${complex.suppliedHouseholds.toLocaleString("ko-KR")}호`}
+                        term={complex.unitLabel}
+                        value={formatUnits(complex.suppliedHouseholds, complex.unitLabel)}
                       />
                       <NoticeDetailFact term="신규공급" value={`${newUnits}호`} />
                       <NoticeDetailFact
@@ -255,15 +266,25 @@ export function HousingNoticeDetailPanel({
                         value={`${resupplyUnitsForComplex}호`}
                       />
                     </dl>
-                    <button
-                      className="notice-complex-card__select"
-                      type="button"
-                      aria-label={`${complex.name} 주택형 보기`}
-                      aria-pressed={selected}
-                      onClick={() => chooseComplex(complex.id)}
-                    >
-                      {selected ? "선택한 단지" : "이 단지 주택형 보기"}
-                    </button>
+                    <div className="notice-complex-card__actions">
+                      <button
+                        className="notice-complex-card__select"
+                        type="button"
+                        aria-label={`${complex.name} 주택형 보기`}
+                        aria-pressed={selected}
+                        onClick={() => chooseComplex(complex.id)}
+                      >
+                        {selected ? "선택한 단지" : "이 단지 주택형 보기"}
+                      </button>
+                      <button
+                        className="notice-complex-card__detail"
+                        type="button"
+                        aria-label={`${complex.name} 단지 상세 보기`}
+                        onClick={() => onOpenComplex(complex.id)}
+                      >
+                        단지 상세 보기
+                      </button>
+                    </div>
                   </div>
                 </article>
               );
@@ -340,6 +361,7 @@ export function HousingNoticeDetailPanel({
           <NoticeHousingTypeSection
             entries={housingTypeEntries}
             selectedEntry={selectedEntry}
+            unitLabel={selectedComplex?.unitLabel ?? "공급 세대"}
             onSelect={setSelectedHousingKey}
           />
         )}
@@ -419,10 +441,12 @@ function ScheduleStep({ step }: { step: NoticeScheduleStep }) {
 function NoticeHousingTypeSection({
   entries,
   selectedEntry,
+  unitLabel,
   onSelect,
 }: {
   entries: readonly HousingTypeEntry[];
   selectedEntry: HousingTypeEntry;
+  unitLabel: NoticeSupplyComplex["unitLabel"];
   onSelect: (key: string) => void;
 }) {
   const housingType = selectedEntry.housingType;
@@ -467,7 +491,10 @@ function NoticeHousingTypeSection({
             value={`${housingType.code} · ${housingType.roomLabel}`}
             wide
           />
-          <NoticeDetailFact term="금회 공급 세대수" value={`${housingType.units}호`} />
+          <NoticeDetailFact
+            term={unitLabel === "모집 예비자" ? "금회 모집 예비자" : "금회 공급 세대수"}
+            value={formatUnits(housingType.units, unitLabel)}
+          />
           <NoticeDetailFact
             term="전용면적"
             value={`${housingType.exclusiveAreaSquareMeters}㎡`}
@@ -668,16 +695,13 @@ function profileSummary(profile: EligibilityProfile) {
 }
 
 function deadlineAccessibleLabel(notice: HousingNotice) {
+  if (notice.status === "closed") return "접수 마감 완료";
   if (notice.daysLeft === null) return "상시 모집";
   return `${noticeDeadlineContext()}까지 ${notice.daysLeft}일`;
 }
 
 function formatDateRange(start: string, end: string) {
   return `${formatNoticeDate(start)} – ${formatNoticeDate(end)}`;
-}
-
-function formatMonth(month: string) {
-  return month.replace("-", ".");
 }
 
 function formatScheduleDate(step: NoticeScheduleStep) {
@@ -707,4 +731,13 @@ function supplyKindLabel(kind: NoticeSupplyKind) {
 
 function formatWon(value: number) {
   return `${value.toLocaleString("ko-KR")}원`;
+}
+
+function formatUnits(
+  units: number,
+  label: NoticeSupplyComplex["unitLabel"],
+) {
+  if (label === "모집 예비자") return `${units.toLocaleString("ko-KR")}명`;
+  if (label === "공급 세대") return `${units.toLocaleString("ko-KR")}세대`;
+  return `${units.toLocaleString("ko-KR")}호`;
 }

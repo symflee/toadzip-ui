@@ -1,14 +1,9 @@
 "use client";
 
 import {
-  Bell,
-  BellRing,
-  Bookmark,
   Check,
   ChevronDown,
   CircleAlert,
-  Heart,
-  Home,
   MapPin,
   RotateCcw,
   Search,
@@ -17,7 +12,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
   useEffect,
@@ -26,21 +20,22 @@ import {
   useState,
 } from "react";
 import { HousingComplexDetailPanel } from "./HousingComplexDetailPanel";
+import { HousingListingCard } from "./HousingListingCard";
 import { HousingMap } from "./HousingMap";
-import { HousingNoticeDetailPanel } from "./HousingNoticeDetailPanel";
 import {
-  formatNoticeDate,
+  HousingNoticeCard,
+  noticeRecruitmentLabel,
+} from "./HousingNoticeCard";
+import { HousingNoticeDetailPanel } from "./HousingNoticeDetailPanel";
+import { HousingTopBar } from "./HousingTopBar";
+import {
+  findNoticeByComplexId,
   HOUSING_NOTICES,
-  noticeDeadlineContext,
-  noticeDeadlineLabel,
-  noticeStatusLabel,
-  type HousingNotice,
 } from "./housing-notice-data";
 import {
   DEFAULT_FILTERS,
   DEFAULT_PROFILE,
   filterListings,
-  formatMoney,
   HOUSING_LISTINGS,
   sortListings,
   type EligibilityProfile,
@@ -53,9 +48,9 @@ const SAVED_STORAGE_KEY = "toadzip:saved-listings";
 const SAVED_NOTICE_STORAGE_KEY = "toadzip:saved-notices";
 const ALERT_STORAGE_KEY = "toadzip:listing-alerts";
 const PROFILE_STORAGE_KEY = "toadzip:eligibility-profile";
-const PROTOTYPE_VARIANTS = ["A", "B", "C"] as const;
+const MAP_PROTOTYPE_VARIANTS = ["A", "B", "C"] as const;
 
-type PrototypeVariant = (typeof PROTOTYPE_VARIANTS)[number];
+type MapPrototypeVariant = (typeof MAP_PROTOTYPE_VARIANTS)[number];
 
 interface FilterSelectProps {
   label: string;
@@ -91,22 +86,6 @@ function FilterSelect({
   );
 }
 
-function listingStatus(listing: HousingListing) {
-  if (listing.status === "upcoming") {
-    return {
-      label: "모집예정",
-      deadline: listing.daysLeft === null ? null : `D-${listing.daysLeft}`,
-    };
-  }
-  if (listing.status === "always") {
-    return { label: "상시모집", deadline: null };
-  }
-  return {
-    label: "접수중",
-    deadline: listing.daysLeft === null ? null : `D-${listing.daysLeft}`,
-  };
-}
-
 function profileLabel(profile: EligibilityProfile) {
   const labels = {
     youth: "청년",
@@ -115,245 +94,6 @@ function profileLabel(profile: EligibilityProfile) {
     senior: "고령자",
   };
   return `${labels[profile.householdType]} · ${profile.householdSize}인 · ${profile.homeless ? "무주택" : "주택 보유"}`;
-}
-
-function ListingCard({
-  listing,
-  selected,
-  hovered,
-  saved,
-  alerted,
-  cardRef,
-  onSelect,
-  onHover,
-  onSave,
-  onAlert,
-  onOpenNotice,
-}: {
-  listing: HousingListing;
-  selected: boolean;
-  hovered: boolean;
-  saved: boolean;
-  alerted: boolean;
-  cardRef: (node: HTMLElement | null) => void;
-  onSelect: () => void;
-  onHover: (hovering: boolean) => void;
-  onSave: () => void;
-  onAlert: () => void;
-  onOpenNotice: () => void;
-}) {
-  const status = listingStatus(listing);
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    onSelect();
-  };
-
-  return (
-    <article
-      ref={cardRef}
-      className={`listing-card ${selected ? "is-selected" : ""} ${hovered ? "is-hovered" : ""}`}
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={handleKeyDown}
-      onMouseEnter={() => onHover(true)}
-      onMouseLeave={() => onHover(false)}
-      onFocus={() => onHover(true)}
-      onBlur={() => onHover(false)}
-      aria-label={`${listing.title}, ${listing.areaSquareMeters}제곱미터, 월 ${formatMoney(listing.monthlyRentWon)}`}
-    >
-      <div
-        className="listing-card__media"
-        role="img"
-        aria-label={`${listing.title} 단지 이미지`}
-        style={{
-          "--listing-image": `url("${listing.complexDetails.photoUrl}")`,
-        } as CSSProperties}
-      >
-        <div className="listing-card__media-badges">
-          <span className={`status-badge status-badge--${listing.status}`}>
-            {status.label}
-          </span>
-          {status.deadline && (
-            <span className="deadline-badge">{status.deadline}</span>
-          )}
-        </div>
-      </div>
-
-      <section className="listing-card__summary">
-        <div className="listing-card__summary-topline">
-          <p className="listing-card__location">
-            {listing.regionLabel} {listing.district}
-          </p>
-          <button
-            className={`icon-button save-button listing-card__bookmark ${saved ? "is-saved" : ""}`}
-            type="button"
-            aria-label={saved ? `${listing.title} 저장 해제` : `${listing.title} 저장`}
-            aria-pressed={saved}
-            onClick={(event) => {
-              event.stopPropagation();
-              onSave();
-            }}
-          >
-            <Bookmark size={21} fill={saved ? "currentColor" : "none"} />
-          </button>
-        </div>
-
-        <h3>{listing.title}</h3>
-        <p className="listing-card__operator">
-          <strong>{listing.provider}</strong>
-          <span aria-hidden="true" />
-          <strong>{listing.rentalType}</strong>
-        </p>
-
-        <div className="listing-card__tags">
-          <span>전용 {listing.areaSquareMeters}㎡</span>
-          <span>
-            {listing.completedAt ? `준공 ${listing.completedAt}` : "준공 정보 확인 중"}
-          </span>
-        </div>
-      </section>
-
-      <aside className="listing-card__conditions" aria-label="주요 임대 조건">
-        <p className="listing-card__conditions-title">주요 임대 조건</p>
-        <div className="listing-card__condition">
-          <span>임대보증금</span>
-          <strong>{formatMoney(listing.depositWon)}</strong>
-        </div>
-        <div className="listing-card__condition listing-card__condition--monthly">
-          <span>월 임대료</span>
-          <strong>{formatMoney(listing.monthlyRentWon)}</strong>
-        </div>
-        {listing.status === "upcoming" && (
-          <button
-            type="button"
-            className={`alert-button listing-card__action ${alerted ? "is-alerted" : ""}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onAlert();
-            }}
-          >
-            {alerted ? <BellRing size={15} /> : <Bell size={15} />}
-            {alerted ? "알림 설정됨" : "공고 알림"}
-          </button>
-        )}
-        {listing.status !== "upcoming" && (
-          <button
-            type="button"
-            className="listing-primary-action listing-card__action"
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenNotice();
-            }}
-          >
-            공고 확인
-          </button>
-        )}
-      </aside>
-    </article>
-  );
-}
-
-function NoticeCard({
-  notice,
-  selected,
-  saved,
-  onSelect,
-  onSave,
-}: {
-  notice: HousingNotice;
-  selected: boolean;
-  saved: boolean;
-  onSelect: () => void;
-  onSave: () => void;
-}) {
-  const status = noticeStatusLabel(notice.status);
-  const deadline = noticeDeadlineLabel(notice);
-  const deadlineContext = noticeDeadlineContext();
-  const recruitment = notice.recruitmentKind === "reserve" ? "예비입주자" : "신규입주자";
-  const deadlineAria = notice.daysLeft === null
-    ? "상시 모집"
-    : `${deadlineContext}까지 ${notice.daysLeft}일`;
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    onSelect();
-  };
-
-  return (
-    <article
-      className={`notice-card ${selected ? "is-selected" : ""}`}
-      tabIndex={0}
-      onClick={onSelect}
-      onKeyDown={handleKeyDown}
-      aria-current={selected ? "true" : undefined}
-      aria-label={`${notice.title}, ${status}, ${deadline}`}
-    >
-      <div className="notice-card__topline">
-        <div className="notice-card__classification">
-          <span className="notice-card__rental-type">{notice.rentalType}</span>
-          <span className="notice-card__recruitment">{recruitment}</span>
-        </div>
-        <button
-          className={`icon-button notice-card__bookmark ${saved ? "is-saved" : ""}`}
-          type="button"
-          aria-label={saved ? `${notice.title} 공고 저장 해제` : `${notice.title} 공고 저장`}
-          aria-pressed={saved}
-          onClick={(event) => {
-            event.stopPropagation();
-            onSave();
-          }}
-        >
-          <Bookmark size={20} fill={saved ? "currentColor" : "none"} />
-        </button>
-      </div>
-
-      <h3>{notice.title}</h3>
-
-      <p className="notice-card__source">
-        <MapPin size={13} aria-hidden="true" />
-        <span>{notice.region}</span>
-        <i aria-hidden="true" />
-        <strong>{notice.provider}</strong>
-      </p>
-
-      <div className="notice-card__deadline">
-        <div className="notice-card__status-group">
-          <span className={`notice-card__status notice-card__status--${notice.status}`}>
-            {status}
-          </span>
-          {notice.revision === "corrected" && (
-            <span className="notice-card__revision">정정공고중</span>
-          )}
-        </div>
-        <p aria-label={deadlineAria}>
-          <span>{deadlineContext}</span>
-          <strong>{deadline}</strong>
-        </p>
-      </div>
-
-      <dl className="notice-card__facts">
-        <div className="notice-card__period">
-          <dt>접수기간</dt>
-          <dd>
-            <time dateTime={notice.applyStart}>{formatNoticeDate(notice.applyStart)}</time>
-            <span aria-hidden="true"> – </span>
-            <time dateTime={notice.applyEnd}>{formatNoticeDate(notice.applyEnd)}</time>
-          </dd>
-        </div>
-        <div>
-          <dt>모집 호수</dt>
-          <dd>{notice.units.toLocaleString("ko-KR")}호</dd>
-        </div>
-        <div>
-          <dt>조회수</dt>
-          <dd>{notice.viewCount.toLocaleString("ko-KR")}</dd>
-        </div>
-      </dl>
-    </article>
-  );
 }
 
 function EmptyResults({ onReset }: { onReset: () => void }) {
@@ -427,6 +167,7 @@ function ListingFilterSheet({
                 { value: "active", label: "모집중 + 모집예정" },
                 { value: "open", label: "모집중" },
                 { value: "upcoming", label: "모집예정" },
+                { value: "closed", label: "접수마감" },
                 { value: "always", label: "상시모집" },
                 { value: "all", label: "모든 상태" },
               ]}
@@ -769,8 +510,111 @@ function EligibilityPanel({
   );
 }
 
+function MapPrototypePanel({
+  variant,
+  onVariantChange,
+  onClose,
+}: {
+  variant: MapPrototypeVariant;
+  onVariantChange: (variant: MapPrototypeVariant) => void;
+  onClose: () => void;
+}) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
+    const focusFrame = window.requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>("button")?.focus();
+    });
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      returnFocusRef.current?.focus();
+    };
+  }, []);
+
+  const trapFocus = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+      "button:not(:disabled), input:not(:disabled), a[href]",
+    );
+    if (!focusable?.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const wrapBackward = event.shiftKey && document.activeElement === first;
+    const wrapForward = !event.shiftKey && document.activeElement === last;
+    if (!wrapBackward && !wrapForward) return;
+    event.preventDefault();
+    if (wrapBackward) last.focus();
+    if (wrapForward) first.focus();
+  };
+
+  return (
+    <div
+      className="sheet-layer"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        ref={dialogRef}
+        className="prototype-review-sheet map-prototype-sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="map-prototype-title"
+        aria-describedby="map-prototype-description"
+        onKeyDown={trapFocus}
+      >
+        <header className="prototype-review-sheet__header">
+          <div>
+            <span className="eyebrow">FULL MAP WIREFRAME</span>
+            <h2 id="map-prototype-title">지도 전체 시안</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose} aria-label="닫기">
+            <X size={21} />
+          </button>
+        </header>
+
+        <div className="prototype-review-sheet__body">
+          <p className="prototype-review-description" id="map-prototype-description">
+            선택한 시안을 실제 지도 전체 화면에 적용해 목록과 지도를 함께 검토합니다.
+            B나 C를 고르면 해당 공고 카드가 공고 목록 전체에 바로 적용됩니다.
+          </p>
+
+          <fieldset className="prototype-variant-picker">
+            <legend>전체 화면 시안 선택</legend>
+            <div className="prototype-variant-picker__options">
+              {MAP_PROTOTYPE_VARIANTS.map((item) => (
+                <label key={item}>
+                  <input
+                    className="sr-only"
+                    type="radio"
+                    name="map-prototype"
+                    value={item}
+                    checked={variant === item}
+                    aria-label={`시안 ${item}, ${mapPrototypeDescription(item)}`}
+                    onChange={() => onVariantChange(item)}
+                  />
+                  <span>
+                    <b>{item}</b>
+                    <small>{mapPrototypeShortLabel(item)}</small>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+
+          <p className="map-prototype-sheet__status">
+            A는 기존 카드, B는 C의 제목 우선 구조에 관심 조건 묶음과 작은 저장 버튼을 적용한 브리프, C는 제목 우선 일정·공급 브리프가 적용됩니다.
+          </p>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function HousingExplorer() {
-  const [prototypeVariant, setPrototypeVariant] = useState<PrototypeVariant>("A");
   const [filters, setFilters] = useState<SearchFilters>(DEFAULT_FILTERS);
   const [profile, setProfile] = useState<EligibilityProfile>(DEFAULT_PROFILE);
   const [savedIds, setSavedIds] = useState<Set<string>>(new Set());
@@ -781,6 +625,8 @@ export function HousingExplorer() {
   const [noticeQuery, setNoticeQuery] = useState("");
   const [profileOpen, setProfileOpen] = useState(false);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [mapPrototypeOpen, setMapPrototypeOpen] = useState(false);
+  const [mapPrototypeVariant, setMapPrototypeVariant] = useState<MapPrototypeVariant>("A");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedNoticeId, setSelectedNoticeId] = useState<string | null>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
@@ -810,6 +656,10 @@ export function HousingExplorer() {
   useEffect(() => {
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (mapPrototypeOpen) {
+        setMapPrototypeOpen(false);
+        return;
+      }
       if (profileOpen) {
         setProfileOpen(false);
         return;
@@ -826,7 +676,7 @@ export function HousingExplorer() {
     };
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [filterPanelOpen, profileOpen, selectedNoticeId]);
+  }, [filterPanelOpen, mapPrototypeOpen, profileOpen, selectedNoticeId]);
 
   useEffect(() => {
     window.localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
@@ -844,7 +694,7 @@ export function HousingExplorer() {
     const query = noticeQuery.trim().toLowerCase();
     if (!query) return HOUSING_NOTICES;
     return HOUSING_NOTICES.filter((notice) => {
-      const recruitment = notice.recruitmentKind === "reserve" ? "예비입주자" : "신규입주자";
+      const recruitment = noticeRecruitmentLabel(notice.recruitmentKind);
       const complexKeywords = notice.details.supplyComplexes.flatMap((complex) => {
         return [complex.name, complex.address];
       });
@@ -863,11 +713,15 @@ export function HousingExplorer() {
     ? selectedId
     : null;
   const selectedListing = HOUSING_LISTINGS.find(
-    (listing) => listing.id === visibleSelectedId,
+    (listing) => listing.id === selectedId,
   ) ?? null;
   const selectedNotice = resultView === "notices"
     ? filteredNotices.find((notice) => notice.id === selectedNoticeId) ?? null
     : null;
+  const mapAreaListing = selectedListing ?? filteredListings[0];
+  const mapAreaLabel = mapAreaListing
+    ? `${mapAreaListing.regionLabel} ${mapAreaListing.district.split(" ")[0]}`
+    : "경기 성남시";
 
   const showToast = (message: string) => {
     setToast(message);
@@ -902,6 +756,33 @@ export function HousingExplorer() {
     setResultView("notices");
     setSelectedId(null);
     setSelectedNoticeId(id);
+  };
+
+  const openNoticeForListing = (listingId: string) => {
+    const notice = findNoticeByComplexId(listingId);
+    if (!notice) {
+      showToast("이 단지와 연결된 공고를 준비 중이에요.");
+      return;
+    }
+    setNoticeQuery("");
+    selectNotice(notice.id);
+  };
+
+  const openComplexFromNotice = (complexId: string) => {
+    const listing = HOUSING_LISTINGS.find((item) => item.id === complexId);
+    if (!listing) {
+      showToast("연결된 단지 정보를 찾지 못했어요.");
+      return;
+    }
+    setFilters((current) => ({
+      ...current,
+      query: listing.title,
+      statuses: [],
+    }));
+    setActiveViewport(undefined);
+    setPendingViewport(null);
+    setFilterPanelOpen(false);
+    selectListing(complexId, false);
   };
 
   const updateNoticeQuery = (query: string) => {
@@ -948,55 +829,32 @@ export function HousingExplorer() {
     setPendingViewport(null);
     setFilterPanelOpen(false);
   };
+
+  const applyMapPrototypeVariant = (variant: MapPrototypeVariant) => {
+    setMapPrototypeVariant(variant);
+    setMapPrototypeOpen(false);
+    if (variant === "A") return;
+    setResultView("notices");
+    setSelectedId(null);
+    setSelectedNoticeId(null);
+    setFilterPanelOpen(false);
+  };
   const activeFilterCount = countActiveFilters(filters);
 
   return (
-    <main className="app-shell" data-prototype-variant={prototypeVariant}>
-      <header className="top-header">
-        <a className="brand" href="#top" aria-label="두꺼비집 홈">
-          <span className="brand__mark"><Home size={21} strokeWidth={2.5} /></span>
-          <span className="brand__name">두꺼비집</span>
-          <span className="brand__tagline">공공임대 지도</span>
-        </a>
-
-        <fieldset
-          className="prototype-variant-selector"
-          role="radiogroup"
-          aria-label="와이어프레임 시안"
-        >
-          <legend className="sr-only">와이어프레임 시안</legend>
-          <span className="prototype-variant-selector__label" aria-hidden="true">
-            시안
-          </span>
-          {PROTOTYPE_VARIANTS.map((variant) => (
-            <label key={variant}>
-              <input
-                className="sr-only"
-                type="radio"
-                name="prototype-variant"
-                value={variant}
-                checked={prototypeVariant === variant}
-                onChange={() => setPrototypeVariant(variant)}
-                aria-label={`시안 ${variant}`}
-              />
-              <span>{variant}</span>
-            </label>
-          ))}
-        </fieldset>
-
-        <nav className="header-actions" aria-label="사용자 메뉴">
-          <button
-            type="button"
-            className={`header-button ${savedOnly ? "is-active" : ""}`}
-            onClick={() => setSavedOnly((current) => !current)}
-            aria-pressed={savedOnly}
-          >
-            <Heart size={18} fill={savedOnly ? "currentColor" : "none"} />
-            저장한 집
-            {savedIds.size > 0 && <span className="header-count">{savedIds.size}</span>}
-          </button>
-        </nav>
-      </header>
+    <main className="app-shell" data-prototype-variant={mapPrototypeVariant}>
+      <HousingTopBar
+        mapPrototypeVariant={mapPrototypeVariant}
+        mapPrototypeOpen={mapPrototypeOpen}
+        savedOnly={savedOnly}
+        savedCount={savedIds.size}
+        onOpenMapPrototype={() => {
+            setProfileOpen(false);
+            setFilterPanelOpen(false);
+            setMapPrototypeOpen(true);
+        }}
+        onToggleSaved={() => setSavedOnly((current) => !current)}
+      />
 
       <div className={`workspace ${selectedListing || selectedNotice ? "has-detail" : ""}`} id="top">
         <section className="results-panel" aria-label="공공임대 검색 결과">
@@ -1128,7 +986,7 @@ export function HousingExplorer() {
             >
               {filteredListings.length === 0 && <EmptyResults onReset={resetFilters} />}
               {filteredListings.map((listing) => (
-                <ListingCard
+                <HousingListingCard
                   key={listing.id}
                   listing={listing}
                   selected={visibleSelectedId === listing.id}
@@ -1156,9 +1014,7 @@ export function HousingExplorer() {
                       ["공고 알림을 해제했어요.", "공고가 올라오면 알려드릴게요."],
                     )
                   }
-                  onOpenNotice={() =>
-                    showToast("프로토타입에서는 원문 공고 연결을 준비 중이에요.")
-                  }
+                  onOpenNotice={() => openNoticeForListing(listing.id)}
                 />
               ))}
             </div>
@@ -1181,24 +1037,30 @@ export function HousingExplorer() {
                   </button>
                 </div>
               )}
-              {filteredNotices.map((notice) => (
-                <NoticeCard
-                  key={notice.id}
-                  notice={notice}
-                  selected={selectedNotice?.id === notice.id}
-                  saved={savedNoticeIds.has(notice.id)}
-                  onSelect={() => selectNotice(notice.id)}
-                  onSave={() =>
-                    toggleStoredId(
-                      notice.id,
-                      savedNoticeIds,
-                      setSavedNoticeIds,
-                      SAVED_NOTICE_STORAGE_KEY,
-                      ["공고 저장을 해제했어요.", "관심 공고에 저장했어요."],
-                    )
-                  }
-                />
-              ))}
+              {filteredNotices.length > 0 && (
+                <ul className="notice-card-list" data-variant={mapPrototypeVariant}>
+                  {filteredNotices.map((notice) => (
+                    <li key={notice.id}>
+                      <HousingNoticeCard
+                        notice={notice}
+                        variant={mapPrototypeVariant}
+                        selected={selectedNotice?.id === notice.id}
+                        saved={savedNoticeIds.has(notice.id)}
+                        onSelect={() => selectNotice(notice.id)}
+                        onSave={() =>
+                          toggleStoredId(
+                            notice.id,
+                            savedNoticeIds,
+                            setSavedNoticeIds,
+                            SAVED_NOTICE_STORAGE_KEY,
+                            ["공고 저장을 해제했어요.", "관심 공고에 저장했어요."],
+                          )
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
@@ -1222,10 +1084,10 @@ export function HousingExplorer() {
               role="status"
               aria-live="polite"
               aria-atomic="true"
-              aria-label={`현재 지도 영역 경기 성남시, 검색 결과 ${filteredListings.length}건`}
+              aria-label={`현재 지도 영역 ${mapAreaLabel}, 검색 결과 ${filteredListings.length}건`}
             >
               <MapPin size={16} />
-              <strong>경기 성남시</strong>
+              <strong>{mapAreaLabel}</strong>
               <span className="map-area-pill__separator" aria-hidden="true">|</span>
               <b>{filteredListings.length}건</b>
             </div>
@@ -1260,9 +1122,7 @@ export function HousingExplorer() {
               key={selectedListing.id}
               listing={selectedListing}
               onClose={() => setSelectedId(null)}
-              onOpenNotice={() =>
-                showToast("프로토타입에서는 원문 공고 연결을 준비 중이에요.")
-              }
+              onOpenNotice={() => openNoticeForListing(selectedListing.id)}
             />
           )}
 
@@ -1278,6 +1138,7 @@ export function HousingExplorer() {
               onOpenSource={() =>
                 showToast("프로토타입 공고 원문 링크 연결을 준비 중이에요.")
               }
+              onOpenComplex={openComplexFromNotice}
             />
           )}
         </section>
@@ -1296,7 +1157,27 @@ export function HousingExplorer() {
         />
       )}
 
+      {mapPrototypeOpen && (
+        <MapPrototypePanel
+          variant={mapPrototypeVariant}
+          onVariantChange={applyMapPrototypeVariant}
+          onClose={() => setMapPrototypeOpen(false)}
+        />
+      )}
+
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
   );
+}
+
+function mapPrototypeDescription(variant: MapPrototypeVariant) {
+  if (variant === "A") return "기존 공고 카드";
+  if (variant === "B") return "관심 조건 묶음형 공고 브리프 카드";
+  return "제목 우선 일정·공급 브리프 카드";
+}
+
+function mapPrototypeShortLabel(variant: MapPrototypeVariant) {
+  if (variant === "A") return "기존 카드";
+  if (variant === "B") return "관심 조건 B 적용";
+  return "제목 우선 C 적용";
 }

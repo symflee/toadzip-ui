@@ -9,6 +9,7 @@ import {
 import {
   formatNoticeDate,
   HOUSING_NOTICES,
+  findNoticeByComplexId,
   noticeDeadlineLabel,
   noticeStatusLabel,
   type HousingNotice,
@@ -61,9 +62,20 @@ vi.mock("../app/HousingMap", () => ({
 
 import { HousingExplorer } from "../app/HousingExplorer";
 
+const PRIMARY_PROTOTYPE_NOTICE = HOUSING_NOTICES.find((notice) => {
+  return notice.sourceKind === "prototype";
+}) ?? HOUSING_NOTICES[0]!;
+
 function noticeTitlePattern(notice: HousingNotice) {
   const escapedTitle = notice.title.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(escapedTitle);
+}
+
+function noticeUnitsText(notice: HousingNotice) {
+  const units = notice.units.toLocaleString("ko-KR");
+  if (notice.unitLabel === "모집 예비자") return `${units}명`;
+  if (notice.unitLabel === "모집 호수") return `${units}호`;
+  return `${units}세대`;
 }
 
 function noticeCard(notice: HousingNotice) {
@@ -199,25 +211,29 @@ describe("HousingExplorer", () => {
     expect(detailView.getByRole("img", { name: "45A 평면도" })).toBeInTheDocument();
     expect(detailView.getByRole("tabpanel", { name: "45A 주택형 상세" })).toBeInTheDocument();
 
-    fireEvent.click(detailView.getByRole("button", { name: "공고상세 페이지 바로가기" }));
-    expect(
-      screen.getByText("프로토타입에서는 원문 공고 연결을 준비 중이에요."),
-    ).toBeInTheDocument();
-
-    for (const removedLabel of [
-      "공유",
-      "관심 단지",
-    ]) {
+    for (const removedLabel of ["공유", "관심 단지"]) {
       expect(detailView.queryByText(removedLabel)).not.toBeInTheDocument();
     }
 
-    fireEvent.click(detailView.getByRole("button", { name: "단지 상세 닫기" }));
+    const linkedNotice = findNoticeByComplexId(listing.id);
+    expect(linkedNotice).toBeDefined();
+    fireEvent.click(detailView.getByRole("button", { name: "공고상세 페이지 바로가기" }));
+    expect(screen.getByRole("tab", { name: "공고 목록" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(
+      screen.getByRole("complementary", {
+        name: `${linkedNotice?.title} 공고 상세 정보`,
+      }),
+    ).toBeInTheDocument();
+
     expect(
       screen.queryByRole("complementary", {
         name: `${listing.title} 단지 상세 정보`,
       }),
     ).not.toBeInTheDocument();
-    expect(card).not.toHaveClass("is-selected");
+    expect(card).not.toBeInTheDocument();
   });
 
   it("공통 목록 헤더에서 단지 목록과 공고 목록을 전환한다", () => {
@@ -253,7 +269,7 @@ describe("HousingExplorer", () => {
     const noticePanel = screen.getByRole("tabpanel", { name: "공고 목록" });
     expect(within(noticePanel).getAllByRole("article")).toHaveLength(HOUSING_NOTICES.length);
 
-    const notice = HOUSING_NOTICES[0];
+    const notice = PRIMARY_PROTOTYPE_NOTICE;
     const noticeCard = within(noticePanel).getByRole("article", {
       name: new RegExp(notice.title),
     });
@@ -266,7 +282,7 @@ describe("HousingExplorer", () => {
     expect(noticeView.getByText(noticeStatusLabel(notice.status))).toBeInTheDocument();
     expect(noticeView.getByText(formatNoticeDate(notice.applyStart))).toBeInTheDocument();
     expect(noticeView.getByText(formatNoticeDate(notice.applyEnd))).toBeInTheDocument();
-    expect(noticeView.getByText(`${notice.units.toLocaleString("ko-KR")}호`)).toBeInTheDocument();
+    expect(noticeView.getByText(noticeUnitsText(notice))).toBeInTheDocument();
     expect(noticeView.getByText(notice.viewCount.toLocaleString("ko-KR"))).toBeInTheDocument();
     expect(
       noticeView.getByLabelText(`접수 마감까지 ${notice.daysLeft}일`),
@@ -315,8 +331,8 @@ describe("HousingExplorer", () => {
     const noticeSearch = within(resultsPanel).getByRole("searchbox", {
       name: "공고 검색",
     });
-    const includedComplexName = HOUSING_NOTICES[0].details.supplyComplexes[1]?.name
-      ?? HOUSING_NOTICES[0].title;
+    const includedComplexName = PRIMARY_PROTOTYPE_NOTICE.details.supplyComplexes[1]?.name
+      ?? PRIMARY_PROTOTYPE_NOTICE.title;
     expect(noticeSearch).toHaveValue("");
     fireEvent.change(noticeSearch, { target: { value: includedComplexName } });
     expect(noticeSearch).toHaveValue(includedComplexName);
@@ -379,7 +395,7 @@ describe("HousingExplorer", () => {
     expect(detailView.getByText(/최종 신청자격은 반드시 공고문에서 확인/)).toBeInTheDocument();
 
     expect(detailView.getByRole("heading", { name: "상세 공급 일정" })).toBeInTheDocument();
-    expect(detailView.getByText(`입주 예정월 ${notice.details.moveInMonth.replace("-", ".")}`)).toBeInTheDocument();
+    expect(detailView.getByText(notice.details.moveInNote)).toBeInTheDocument();
     expect(
       detailView.getByRole("listitem", {
         name: `${formatNoticeDate(notice.publishedAt)} | 공고 게시`,
@@ -391,7 +407,7 @@ describe("HousingExplorer", () => {
 
     expect(detailView.getByText("공급 단지수")).toBeInTheDocument();
     expect(detailView.getByText(`${notice.details.supplyComplexes.length}곳`)).toBeInTheDocument();
-    expect(detailView.getByText("공급 세대수")).toBeInTheDocument();
+    expect(detailView.getAllByText("공급 세대수")).not.toHaveLength(0);
     expect(
       detailView.getAllByText(`${supplyHouseholds.toLocaleString("ko-KR")}호`),
     ).not.toHaveLength(0);
@@ -418,7 +434,7 @@ describe("HousingExplorer", () => {
 
   it("공고 카드의 키보드 선택과 북마크 전파 차단 및 닫기를 지원한다", () => {
     render(<HousingExplorer />);
-    const notice = HOUSING_NOTICES[0];
+    const notice = PRIMARY_PROTOTYPE_NOTICE;
     fireEvent.click(screen.getByRole("tab", { name: "공고 목록" }));
     const card = noticeCard(notice);
     const save = within(card).getByRole("button", { name: `${notice.title} 공고 저장` });
@@ -455,7 +471,7 @@ describe("HousingExplorer", () => {
 
   it("공급 구분 표와 주택형 탭을 바꾸고 공고문 CTA를 제공한다", () => {
     render(<HousingExplorer />);
-    const notice = HOUSING_NOTICES[0];
+    const notice = PRIMARY_PROTOTYPE_NOTICE;
     const { detailView } = openNoticeDetail(notice);
     const selectedComplex = notice.details.supplyComplexes[0];
     const housingEntries = selectedComplex.housingTypes;
@@ -570,11 +586,50 @@ describe("HousingExplorer", () => {
     ).toHaveLength(secondComplex.housingTypes.length);
   });
 
+  it("PDF 공고의 단지 상세로 이동한 뒤 다시 같은 공고로 돌아온다", () => {
+    render(<HousingExplorer />);
+    const notice = HOUSING_NOTICES.find((item) => {
+      return item.id === "notice-gimhae-jinyeong-centumcube-20260806";
+    });
+    if (!notice) throw new Error("김해진영 PDF 공고 예시 데이터가 필요합니다.");
+    const complex = notice.details.supplyComplexes[0];
+    const { detailView } = openNoticeDetail(notice);
+    const complexSummary = detailView.getByRole("article", {
+      name: `${complex.name} 공고 공급 요약`,
+    });
+
+    fireEvent.click(
+      within(complexSummary).getByRole("button", {
+        name: `${complex.name} 단지 상세 보기`,
+      }),
+    );
+
+    expect(screen.getByRole("tab", { name: "단지 목록" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const complexDetail = screen.getByRole("complementary", {
+      name: `${complex.name} 단지 상세 정보`,
+    });
+    expect(complexDetail).toBeInTheDocument();
+
+    fireEvent.click(
+      within(complexDetail).getByRole("button", {
+        name: "공고상세 페이지 바로가기",
+      }),
+    );
+    expect(
+      screen.getByRole("complementary", {
+        name: `${notice.title} 공고 상세 정보`,
+      }),
+    ).toBeInTheDocument();
+  });
+
   it("공고 북마크를 단지 저장과 분리해 보관한다", () => {
     render(<HousingExplorer />);
     fireEvent.click(screen.getByRole("tab", { name: "공고 목록" }));
 
-    const notice = HOUSING_NOTICES[0];
+    const notice = PRIMARY_PROTOTYPE_NOTICE;
     const save = screen.getByRole("button", { name: `${notice.title} 공고 저장` });
     expect(save).toHaveAttribute("aria-pressed", "false");
 
@@ -679,35 +734,181 @@ describe("HousingExplorer", () => {
 
   it("모집중 매물에서 원문 공고 확인 행동을 제공한다", () => {
     render(<HousingExplorer />);
-    const card = screen.getByRole("article", { name: /위례 새솔 청년 행복주택/ });
+    const listing = HOUSING_LISTINGS[0];
+    const linkedNotice = findNoticeByComplexId(listing.id);
+    const card = screen.getByRole("article", { name: new RegExp(listing.title) });
 
     fireEvent.click(within(card).getByRole("button", { name: "공고 확인" }));
 
+    expect(linkedNotice).toBeDefined();
     expect(
-      screen.getByText("프로토타입에서는 원문 공고 연결을 준비 중이에요."),
+      screen.getByRole("complementary", {
+        name: `${linkedNotice?.title} 공고 상세 정보`,
+      }),
     ).toBeInTheDocument();
   });
 
-  it("헤더에서 와이어프레임 시안 A, B, C를 하나씩 선택한다", () => {
+  it("지도 전체 시안 B를 선택하면 공고 목록에 카드 B를 한 번에 적용한다", () => {
     render(<HousingExplorer />);
     const header = screen.getByRole("banner");
-    const selector = within(header).getByRole("radiogroup", {
-      name: "와이어프레임 시안",
+    const mapPrototypeButton = within(header).getByRole("button", {
+      name: "지도 전체 시안 보기, 현재 시안 A",
     });
-    const variantA = within(selector).getByRole("radio", { name: "시안 A" });
-    const variantB = within(selector).getByRole("radio", { name: "시안 B" });
-    const variantC = within(selector).getByRole("radio", { name: "시안 C" });
+    const comparisonLink = within(header).getByRole("link", {
+      name: "요소 UI 비교",
+    });
 
-    expect(variantA).toBeChecked();
-    expect(variantB).not.toBeChecked();
-    expect(variantC).not.toBeChecked();
+    expect(comparisonLink).toHaveAttribute("href", "/showcase");
+    fireEvent.click(mapPrototypeButton);
+
+    const dialog = screen.getByRole("dialog", { name: "지도 전체 시안" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(within(dialog).getByRole("radio", { name: "시안 A, 기존 공고 카드" })).toBeChecked();
+    const variantB = within(dialog).getByRole("radio", {
+      name: "시안 B, 관심 조건 묶음형 공고 브리프 카드",
+    });
+    expect(variantB).toBeEnabled();
+    expect(within(dialog).getByText("관심 조건 B 적용")).toBeInTheDocument();
+    expect(within(dialog).getByRole("radio", {
+      name: "시안 C, 제목 우선 일정·공급 브리프 카드",
+    })).toBeEnabled();
+    expect(within(dialog).queryByRole("link", { name: /요소 UI 비교/ }))
+      .not.toBeInTheDocument();
+
     expect(screen.getByRole("main")).toHaveAttribute("data-prototype-variant", "A");
+    expect(mapPrototypeButton).toHaveAccessibleName("지도 전체 시안 보기, 현재 시안 A");
+
+    fireEvent.click(variantB);
+
+    expect(screen.queryByRole("dialog", { name: "지도 전체 시안" })).not.toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveAttribute("data-prototype-variant", "B");
+    expect(mapPrototypeButton).toHaveAccessibleName("지도 전체 시안 보기, 현재 시안 B");
+    expect(screen.getByRole("tab", { name: "공고 목록" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const noticePanel = screen.getByRole("tabpanel", { name: "공고 목록" });
+    for (const card of within(noticePanel).getAllByRole("article")) {
+      expect(card).toHaveAttribute("data-variant", "B");
+    }
+
+    fireEvent.click(mapPrototypeButton);
+    const reopenedDialog = screen.getByRole("dialog", { name: "지도 전체 시안" });
+    expect(
+      within(reopenedDialog).getByRole("radio", {
+        name: "시안 B, 관심 조건 묶음형 공고 브리프 카드",
+      }),
+    ).toBeChecked();
+    fireEvent.click(
+      within(reopenedDialog).getByRole("radio", {
+        name: "시안 A, 기존 공고 카드",
+      }),
+    );
+
+    expect(screen.queryByRole("dialog", { name: "지도 전체 시안" })).not.toBeInTheDocument();
+    expect(screen.getByRole("main")).toHaveAttribute("data-prototype-variant", "A");
+    expect(mapPrototypeButton).toHaveAccessibleName("지도 전체 시안 보기, 현재 시안 A");
+    for (const card of within(noticePanel).getAllByRole("article")) {
+      expect(card).toHaveAttribute("data-variant", "A");
+    }
+  });
+
+  it("지도 전체 시안 C를 한 번 선택하면 모달을 닫고 모든 공고 카드에 적용한다", () => {
+    render(<HousingExplorer />);
+    const header = screen.getByRole("banner");
+    const mapPrototypeButton = within(header).getByRole("button", {
+      name: "지도 전체 시안 보기, 현재 시안 A",
+    });
+
+    fireEvent.click(mapPrototypeButton);
+    const dialog = screen.getByRole("dialog", { name: "지도 전체 시안" });
+    const variantC = within(dialog).getByRole("radio", {
+      name: "시안 C, 제목 우선 일정·공급 브리프 카드",
+    });
+    expect(variantC).toBeEnabled();
 
     fireEvent.click(variantC);
 
-    expect(variantA).not.toBeChecked();
-    expect(variantC).toBeChecked();
+    expect(screen.queryByRole("dialog", { name: "지도 전체 시안" })).not.toBeInTheDocument();
     expect(screen.getByRole("main")).toHaveAttribute("data-prototype-variant", "C");
+    expect(mapPrototypeButton).toHaveAccessibleName("지도 전체 시안 보기, 현재 시안 C");
+    expect(screen.getByRole("tab", { name: "공고 목록" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const noticePanel = screen.getByRole("tabpanel", { name: "공고 목록" });
+    const noticeList = within(noticePanel).getByRole("list");
+    expect(within(noticeList).getAllByRole("listitem")).toHaveLength(HOUSING_NOTICES.length);
+    const noticeCards = within(noticeList).getAllByRole("article");
+    expect(noticeCards).toHaveLength(HOUSING_NOTICES.length);
+    for (const card of noticeCards) {
+      expect(card).toHaveAttribute("data-variant", "C");
+    }
+  });
+
+  it("시안 C를 적용해도 목록별 검색과 필터 및 공고 순서를 유지한다", () => {
+    render(<HousingExplorer />);
+    const resultsPanel = screen.getByRole("region", { name: "공공임대 검색 결과" });
+    const complexSearch = within(resultsPanel).getByRole("searchbox", {
+      name: "단지 검색",
+    });
+    fireEvent.change(complexSearch, { target: { value: "위례" } });
+    fireEvent.click(within(resultsPanel).getByRole("button", { name: "검색 필터 열기" }));
+    const filterSheet = screen.getByRole("dialog", { name: "검색 필터" });
+    fireEvent.change(within(filterSheet).getByRole("combobox", { name: "임대 유형" }), {
+      target: { value: "행복주택" },
+    });
+    fireEvent.click(within(filterSheet).getByRole("button", { name: /건 결과 보기/ }));
+
+    fireEvent.click(screen.getByRole("tab", { name: "공고 목록" }));
+    const noticeSearch = within(resultsPanel).getByRole("searchbox", {
+      name: "공고 검색",
+    });
+    fireEvent.change(noticeSearch, { target: { value: "공고" } });
+    const expectedNotices = HOUSING_NOTICES.filter((notice) => {
+      return notice.title.includes("공고");
+    });
+    expect(expectedNotices.length).toBeGreaterThan(1);
+    let noticePanel = screen.getByRole("tabpanel", { name: "공고 목록" });
+    let noticeCards = within(noticePanel).getAllByRole("article");
+    expect(noticeCards).toHaveLength(expectedNotices.length);
+    expectedNotices.forEach((notice, index) => {
+      expect(noticeCards[index]).toHaveAccessibleName(noticeTitlePattern(notice));
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "단지 목록" }));
+    const mapPrototypeButton = within(screen.getByRole("banner")).getByRole("button", {
+      name: "지도 전체 시안 보기, 현재 시안 A",
+    });
+    fireEvent.click(mapPrototypeButton);
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: "지도 전체 시안" })).getByRole("radio", {
+        name: "시안 C, 제목 우선 일정·공급 브리프 카드",
+      }),
+    );
+
+    expect(screen.getByRole("tab", { name: "공고 목록" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(within(resultsPanel).getByRole("searchbox", { name: "공고 검색" })).toHaveValue(
+      "공고",
+    );
+    noticePanel = screen.getByRole("tabpanel", { name: "공고 목록" });
+    noticeCards = within(noticePanel).getAllByRole("article");
+    expect(noticeCards).toHaveLength(expectedNotices.length);
+    expectedNotices.forEach((notice, index) => {
+      expect(noticeCards[index]).toHaveAccessibleName(noticeTitlePattern(notice));
+      expect(noticeCards[index]).toHaveAttribute("data-variant", "C");
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "단지 목록" }));
+    expect(within(resultsPanel).getByRole("searchbox", { name: "단지 검색" })).toHaveValue(
+      "위례",
+    );
+    expect(
+      within(resultsPanel).getByRole("button", { name: /검색 필터 열기, 1개 적용 중/ }),
+    ).toBeInTheDocument();
   });
 
   it("헤더의 중복 조건 버튼 없이 목록 상단에서 조건 설정 모달을 열고 적용한다", () => {

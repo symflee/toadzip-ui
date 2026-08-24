@@ -60,14 +60,15 @@ function viewportFromMap(map: LeafletMap): MapViewport {
 }
 
 function statusText(listing: HousingListing) {
+  if (listing.status === "closed") return "접수마감";
   if (listing.status === "upcoming") return "모집예정";
   if (listing.status === "always") return "상시모집";
   if ((listing.daysLeft ?? 0) <= 3) return `마감 D-${listing.daysLeft ?? 0}`;
   return "모집중";
 }
 
-function markerHtml(listing: HousingListing, selected: boolean, hovered: boolean) {
-  const classes = [
+function markerClassName(listing: HousingListing, selected: boolean, hovered: boolean) {
+  return [
     "housing-marker",
     `housing-marker--${listing.status}`,
     selected ? "is-selected" : "",
@@ -75,6 +76,10 @@ function markerHtml(listing: HousingListing, selected: boolean, hovered: boolean
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+function markerHtml(listing: HousingListing, selected: boolean, hovered: boolean) {
+  const classes = markerClassName(listing, selected, hovered);
 
   return `
     <div class="${classes}">
@@ -85,6 +90,53 @@ function markerHtml(listing: HousingListing, selected: boolean, hovered: boolean
       </span>
     </div>
   `;
+}
+
+export function HousingMapMarkerPreview({
+  listing,
+  selected = false,
+  hovered = false,
+  ariaLabel,
+}: {
+  listing: HousingListing;
+  selected?: boolean;
+  hovered?: boolean;
+  ariaLabel: string;
+}) {
+  return (
+    <div
+      className={markerClassName(listing, selected, hovered)}
+      role="img"
+      aria-label={ariaLabel}
+    >
+      <span className="housing-marker__top">
+        {listing.provider} · {statusText(listing)}
+      </span>
+      <span className="housing-marker__body">
+        <strong>{listing.areaSquareMeters}㎡</strong>
+        <b>월 {formatMoney(listing.monthlyRentWon)}</b>
+      </span>
+    </div>
+  );
+}
+
+export function HousingMapClusterPreview({
+  regionName,
+  count,
+}: {
+  regionName: string;
+  count: number;
+}) {
+  return (
+    <div
+      className="cluster-marker"
+      role="img"
+      aria-label={`${regionName} 공공임대 ${count}곳 묶음`}
+    >
+      <span>{regionName}</span>
+      <strong>{count}곳</strong>
+    </div>
+  );
 }
 
 function clusterHtml(regionName: string, count: number) {
@@ -246,6 +298,15 @@ export function HousingMap({
     drawMarkers(runtimeRef.current, state, callbacksRef);
   }, [listings, selectedId, hoveredId]);
 
+  useEffect(() => {
+    if (!selectedId || !runtimeRef.current) return;
+    const selected = listings.find((listing) => listing.id === selectedId);
+    if (!selected) return;
+    const point: [number, number] = [selected.latitude, selected.longitude];
+    if (runtimeRef.current.map.getBounds().contains(point)) return;
+    runtimeRef.current.map.flyTo(point, 13, { duration: 0.65 });
+  }, [listings, selectedId]);
+
   const zoomBy = (amount: number) => {
     if (amount > 0) runtimeRef.current?.map.zoomIn(amount);
     if (amount < 0) runtimeRef.current?.map.zoomOut(Math.abs(amount));
@@ -274,7 +335,7 @@ export function HousingMap({
         ref={containerRef}
         className="map-canvas"
         role="application"
-        aria-label="성남·위례권 공공임대 지도"
+        aria-label="전국 공공임대 지도"
       />
       {!ready && (
         <div className="map-loading" role="status">

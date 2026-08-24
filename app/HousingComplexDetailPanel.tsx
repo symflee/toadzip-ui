@@ -22,12 +22,14 @@ interface HousingComplexDetailPanelProps {
   listing: HousingListing;
   onClose: () => void;
   onOpenNotice: () => void;
+  embedded?: boolean;
 }
 
 export function HousingComplexDetailPanel({
   listing,
   onClose,
   onOpenNotice,
+  embedded = false,
 }: HousingComplexDetailPanelProps) {
   const details = listing.complexDetails;
   const defaultHousingCode = details.housingTypes.at(-1)?.code ?? "";
@@ -37,7 +39,7 @@ export function HousingComplexDetailPanel({
   );
   return (
     <aside
-      className="complex-detail-panel"
+      className={`complex-detail-panel ${embedded ? "is-showcase" : ""}`}
       aria-label={`${listing.title} 단지 상세 정보`}
     >
       <header className="complex-detail-panel__header">
@@ -45,12 +47,19 @@ export function HousingComplexDetailPanel({
           <span>단지 상세 정보</span>
           <strong>{listing.title}</strong>
         </div>
-        <button type="button" aria-label="단지 상세 닫기" onClick={onClose}>
-          <X size={19} />
-        </button>
+        {!embedded && (
+          <button type="button" aria-label="단지 상세 닫기" onClick={onClose}>
+            <X size={19} />
+          </button>
+        )}
       </header>
 
-      <div className="complex-detail-panel__scroll">
+      <div
+        className="complex-detail-panel__scroll"
+        role="region"
+        aria-label={`${listing.title} 단지 상세 내용`}
+        tabIndex={0}
+      >
         <section
           className="complex-detail-hero"
           role="img"
@@ -88,7 +97,7 @@ export function HousingComplexDetailPanel({
             <DetailFact term="임대종류" value={listing.rentalType} />
             <DetailFact term="준공일자" value={listing.completedAt ?? "정보 확인 중"} />
             <DetailFact term="건물형태" value={details.buildingType} />
-            <DetailFact term="엘리베이터" value={details.hasElevator ? "있음" : "없음"} />
+            <DetailFact term="엘리베이터" value={formatAvailability(details.hasElevator)} />
             <DetailFact term="난방종류" value={details.heatingType} />
             <DetailFact term="공급 면적" value={`${details.supplyAreaSquareMeters}㎡`} />
             <DetailFact term="복도유형" value={details.corridorType} />
@@ -171,19 +180,19 @@ export function HousingComplexDetailPanel({
             <dl className="assigned-school__metrics">
               <DetailFact
                 term="학생수"
-                value={`${formatNumber(details.assignedSchool.students)}명`}
+                value={formatCount(details.assignedSchool.students, "명")}
               />
               <DetailFact
                 term="교육비"
-                value={`월 ${formatWon(details.assignedSchool.monthlyEducationCostWon)}`}
+                value={formatMonthlyWon(details.assignedSchool.monthlyEducationCostWon)}
               />
               <DetailFact
                 term="방과후 프로그램 수"
-                value={`${details.assignedSchool.afterSchoolPrograms}개`}
+                value={formatCount(details.assignedSchool.afterSchoolPrograms, "개")}
               />
               <DetailFact
                 term="교사 수"
-                value={`${details.assignedSchool.teachers}명`}
+                value={formatCount(details.assignedSchool.teachers, "명")}
               />
             </dl>
           </div>
@@ -194,6 +203,9 @@ export function HousingComplexDetailPanel({
           description="이전 모집 규모와 경쟁률 변화를 함께 확인하세요."
         >
           <ul className="past-notice-list">
+            {details.pastNotices.length === 0 && (
+              <li className="past-notice-list__empty">연결된 과거 공고가 아직 없어요.</li>
+            )}
             {details.pastNotices.map((notice) => (
               <li key={notice.id}>
                 <div>
@@ -353,6 +365,7 @@ function FloorPlan({ housingType }: { housingType: HousingTypeInfo }) {
 }
 
 function noticeStatusLabel(listing: HousingListing) {
+  if (listing.status === "closed") return "접수마감";
   if (listing.status === "upcoming") return "모집예정";
   if (listing.status === "always") return "상시모집";
   return "접수중";
@@ -364,6 +377,15 @@ function deadlineLabel(listing: HousingListing) {
 }
 
 function deadlinePresentation(listing: HousingListing) {
+  if (listing.status === "closed") {
+    return {
+      context: "접수 종료",
+      label: "마감",
+      dateLabel: `${listing.applyEnd.replaceAll("-", ".")} 마감`,
+      dateTime: listing.applyEnd,
+      accessibleLabel: "접수 마감 완료",
+    };
+  }
   if (listing.status === "always" || listing.daysLeft === null) {
     return {
       context: "상시 모집",
@@ -442,7 +464,7 @@ function FacilityRow({ facility }: { facility: NearbyFacility }) {
         <strong>{facility.name}</strong>
         <small>{facilityLabel(facility.kind)}</small>
       </span>
-      <b>{facility.travelMode} {facility.minutes}분</b>
+      <b>{facility.minutes > 0 ? `${facility.travelMode} ${facility.minutes}분` : "정보 확인 중"}</b>
     </li>
   );
 }
@@ -472,8 +494,8 @@ function formatHouseholds(value: number | null) {
 }
 
 function formatParkingSpaces(totalParkingSpaces: number, totalHouseholds: number) {
-  if (totalHouseholds <= 0) {
-    return `${formatNumber(totalParkingSpaces)}대 (정보 확인 중)`;
+  if (totalParkingSpaces <= 0 || totalHouseholds <= 0) {
+    return "정보 확인 중";
   }
   const spacesPerHousehold = (totalParkingSpaces / totalHouseholds).toLocaleString(
     "ko-KR",
@@ -488,4 +510,19 @@ function formatWon(value: number) {
 
 function formatNumber(value: number) {
   return value.toLocaleString("ko-KR", { maximumFractionDigits: 1 });
+}
+
+function formatAvailability(value: boolean | null) {
+  if (value === null) return "정보 확인 중";
+  return value ? "있음" : "없음";
+}
+
+function formatCount(value: number, suffix: string) {
+  if (value <= 0) return "정보 확인 중";
+  return `${formatNumber(value)}${suffix}`;
+}
+
+function formatMonthlyWon(value: number) {
+  if (value <= 0) return "정보 확인 중";
+  return `월 ${formatWon(value)}`;
 }

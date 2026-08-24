@@ -120,6 +120,65 @@ describe("filterListings", () => {
   });
 });
 
+describe("PDF 공고 기반 단지 데이터", () => {
+  it("기존 prototype mock을 유지하면서 세 공고의 단지를 추가한다", () => {
+    const prototypeListings = HOUSING_LISTINGS.filter((item) => {
+      return item.sourceKind === "prototype";
+    });
+    const documentListings = HOUSING_LISTINGS.filter((item) => {
+      return item.sourceKind === "notice-document";
+    });
+
+    expect(prototypeListings.length).toBeGreaterThan(0);
+    expect(documentListings.map((item) => item.id)).toEqual([
+      "pdf-jeonju-samcheon6",
+      "pdf-gimhae-jinyeong-centumcube",
+      "pdf-busan-myeongji-happy",
+    ]);
+    expect(documentListings.every((item) => item.status === "closed")).toBe(true);
+  });
+
+  it("공고문의 단지 규모와 주택형별 임대조건을 보존한다", () => {
+    const samcheon = HOUSING_LISTINGS.find((item) => {
+      return item.id === "pdf-jeonju-samcheon6";
+    });
+    const gimhae = HOUSING_LISTINGS.find((item) => {
+      return item.id === "pdf-gimhae-jinyeong-centumcube";
+    });
+    const busan = HOUSING_LISTINGS.find((item) => {
+      return item.id === "pdf-busan-myeongji-happy";
+    });
+
+    expect(samcheon?.complexDetails.totalHouseholds).toBe(854);
+    expect(samcheon?.units).toBe(65);
+    expect(samcheon?.unitLabel).toBe("모집 예비자");
+    expect(samcheon?.complexDetails.housingTypes.map((type) => type.code)).toEqual([
+      "39.51(17-A)",
+      "39.63(17-B)",
+      "39.77(17-C)",
+    ]);
+
+    expect(gimhae?.complexDetails.totalHouseholds).toBe(595);
+    expect(gimhae?.complexDetails.housingTypes).toHaveLength(6);
+    expect(gimhae?.complexDetails.housingTypes[0]).toMatchObject({
+      code: "74A",
+      exclusiveAreaSquareMeters: 74.82,
+      depositWon: 51_521_000,
+      monthlyRentWon: 515_210,
+    });
+
+    expect(busan?.complexDetails.totalHouseholds).toBe(284);
+    expect(busan?.units).toBe(215);
+    expect(busan?.unitLabel).toBe("공급 세대");
+    expect(busan?.complexDetails.housingTypes.map((type) => type.code)).toEqual([
+      "16형(빌트인)",
+      "26A형",
+      "26B형(주거약자)",
+      "36형",
+    ]);
+  });
+});
+
 describe("eligibilityMatch", () => {
   it("프로필과 자격 태그의 일치 개수와 전체 개수를 계산한다", () => {
     const result = eligibilityMatch(
@@ -241,16 +300,22 @@ describe("단지 상세 프로토타입 데이터", () => {
   it("모든 단지에 모집 요약, 주택형과 과거 공고 데이터가 있다", () => {
     for (const housing of HOUSING_LISTINGS) {
       const details = housing.complexDetails;
-      expect(details.recentCompetitionRate).not.toBeNull();
       expect(details.housingTypes.length).toBeGreaterThan(0);
       expect(new Set(details.housingTypes.map(({ code }) => code)).size).toBe(
         details.housingTypes.length,
       );
       expect(details.housingTypes.every(({ floorPlanUrl }) => floorPlanUrl === null)).toBe(true);
-      expect(details.pastNotices).toHaveLength(3);
-      expect(new Set(details.pastNotices.map(({ id }) => id)).size).toBe(
-        details.pastNotices.length,
-      );
+      if (housing.sourceKind === "prototype") {
+        expect(details.recentCompetitionRate).not.toBeNull();
+        expect(details.pastNotices).toHaveLength(3);
+        expect(new Set(details.pastNotices.map(({ id }) => id)).size).toBe(
+          details.pastNotices.length,
+        );
+      }
+      if (housing.sourceKind === "notice-document") {
+        expect(details.recentCompetitionRate).toBeNull();
+        expect(details.pastNotices).toHaveLength(0);
+      }
     }
   });
 });
